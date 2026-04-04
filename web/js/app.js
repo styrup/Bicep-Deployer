@@ -19,6 +19,7 @@ const elTplLoading    = document.getElementById("templates-loading");
 const elPanelEmpty    = document.getElementById("panel-empty");
 const elPanelForm     = document.getElementById("panel-form");
 const elTemplateTitle = document.getElementById("template-title");
+const elTemplateMeta  = document.getElementById("template-meta");
 const elSelectRg      = document.getElementById("select-rg");
 const elRgSection     = document.getElementById("rg-section");
 const elParamsFields  = document.getElementById("params-fields");
@@ -194,8 +195,18 @@ async function onSubscriptionChange() {
 }
 
 function renderTemplateForm(data) {
-  elTemplateTitle.textContent = data.name;
+  elTemplateTitle.textContent = data.metadata?.description || data.name;
   elParamsFields.innerHTML = "";
+
+  // Render metadata
+  renderMetadata(data.metadata || {}, data.name);
+
+  // Auto-set deployment scope from template's targetScope
+  const scope = data.targetScope || "resourceGroup";
+  document.querySelectorAll('input[name="scope"]').forEach((radio) => {
+    radio.checked = radio.value === scope;
+  });
+  elRgSection.classList.toggle("hidden", scope !== "resourceGroup");
 
   (data.parameters || []).forEach((param) => {
     const wrapper = document.createElement("div");
@@ -266,6 +277,33 @@ function renderTemplateForm(data) {
   elPanelForm.classList.remove("hidden");
   elDeployResult.classList.add("hidden");
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function renderMetadata(meta, fileName) {
+  elTemplateMeta.innerHTML = "";
+
+  // Known display keys in preferred order
+  const displayKeys = ["author", "version", "category", "tags"];
+  const shown = new Set(["description"]); // description is used as title
+
+  // Show filename always
+  const fileEl = document.createElement("div");
+  fileEl.className = "meta-item";
+  fileEl.innerHTML = `<span class="meta-key">File</span><span class="meta-value">${escapeHtml(fileName)}</span>`;
+  elTemplateMeta.appendChild(fileEl);
+
+  // Show known keys first, then any remaining
+  const allKeys = [...new Set([...displayKeys, ...Object.keys(meta)])];
+  for (const key of allKeys) {
+    if (shown.has(key) || !meta[key]) continue;
+    shown.add(key);
+    const item = document.createElement("div");
+    item.className = "meta-item";
+    item.innerHTML = `<span class="meta-key">${escapeHtml(key)}</span><span class="meta-value">${escapeHtml(meta[key])}</span>`;
+    elTemplateMeta.appendChild(item);
+  }
+
+  elTemplateMeta.classList.toggle("hidden", Object.keys(meta).length === 0 && !fileName);
 }
 
 function validateJsonInput(textarea) {

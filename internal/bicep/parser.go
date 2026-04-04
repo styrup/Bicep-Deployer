@@ -26,6 +26,67 @@ type Parameter struct {
 	ExpressionHint string    `json:"-"` // internal: hint for expression defaults
 }
 
+// Metadata holds key-value pairs from `metadata` declarations in a Bicep file.
+type Metadata map[string]string
+
+// TemplateInfo contains parsed metadata, target scope, and parameters from a Bicep template.
+type TemplateInfo struct {
+	Metadata    Metadata    `json:"metadata"`
+	TargetScope string      `json:"targetScope"`
+	Parameters  []Parameter `json:"parameters"`
+}
+
+// ParseTemplate extracts metadata, targetScope, and parameters from Bicep source.
+func ParseTemplate(source string) TemplateInfo {
+	return TemplateInfo{
+		Metadata:    ParseMetadata(source),
+		TargetScope: ParseTargetScope(source),
+		Parameters:  ParseParameters(source),
+	}
+}
+
+// ParseTargetScope extracts the `targetScope = '...'` declaration.
+// Returns "resourceGroup" if not specified (Bicep default).
+func ParseTargetScope(source string) string {
+	for _, line := range strings.Split(source, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "targetScope") {
+			if eqIdx := strings.Index(line, "="); eqIdx != -1 {
+				val := strings.TrimSpace(line[eqIdx+1:])
+				val = stripQuotes(val)
+				if val != "" {
+					return val
+				}
+			}
+		}
+	}
+	return "resourceGroup"
+}
+
+// ParseMetadata extracts all `metadata <key> = '<value>'` declarations.
+func ParseMetadata(source string) Metadata {
+	meta := make(Metadata)
+	for _, line := range strings.Split(source, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "metadata ") {
+			continue
+		}
+		// metadata <key> = <value>
+		rest := strings.TrimPrefix(line, "metadata ")
+		eqIdx := strings.Index(rest, "=")
+		if eqIdx == -1 {
+			continue
+		}
+		key := strings.TrimSpace(rest[:eqIdx])
+		val := strings.TrimSpace(rest[eqIdx+1:])
+		val = stripQuotes(val)
+		if key != "" && val != "" {
+			meta[key] = val
+		}
+	}
+	return meta
+}
+
 // ParseParameters extracts all parameter declarations from Bicep source.
 func ParseParameters(source string) []Parameter {
 	var params []Parameter

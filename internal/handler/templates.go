@@ -25,8 +25,10 @@ type templateListResponse struct {
 }
 
 type templateDetailResponse struct {
-	Name       string            `json:"name"`
-	Parameters []bicep.Parameter `json:"parameters"`
+	Name        string            `json:"name"`
+	Metadata    bicep.Metadata    `json:"metadata"`
+	TargetScope string            `json:"targetScope"`
+	Parameters  []bicep.Parameter `json:"parameters"`
 }
 
 // HandleListTemplates serves GET /api/templates
@@ -85,14 +87,13 @@ func HandleGetTemplate(store TemplateStore) http.HandlerFunc {
 			return
 		}
 
-		params := bicep.ParseParameters(content)
-		if params == nil {
-			params = []bicep.Parameter{}
-		}
+		info := bicep.ParseTemplate(content)
 
 		writeJSON(w, http.StatusOK, templateDetailResponse{
-			Name:       name,
-			Parameters: params,
+			Name:        name,
+			Metadata:    info.Metadata,
+			TargetScope: info.TargetScope,
+			Parameters:  info.Parameters,
 		})
 	}
 }
