@@ -1,0 +1,30 @@
+package handler
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+)
+
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, errorResponse{Error: msg})
+}
+
+// extractBearerToken returns the token from the Authorization header.
+func extractBearerToken(r *http.Request) string {
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
+		return ""
+	}
+	return strings.TrimPrefix(auth, "Bearer ")
+}
