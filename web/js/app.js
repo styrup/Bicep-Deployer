@@ -13,7 +13,7 @@ const elSectionLogin  = document.getElementById("section-login");
 const elSectionApp    = document.getElementById("section-app");
 
 const elSelectSub     = document.getElementById("select-subscription");
-const elSelectTpl     = document.getElementById("select-template");
+const elTplGroups     = document.getElementById("template-groups");
 const elTplLoading    = document.getElementById("templates-loading");
 
 const elPanelEmpty    = document.getElementById("panel-empty");
@@ -28,6 +28,9 @@ const elDeployResult  = document.getElementById("deploy-result");
 const elResultStatus  = document.getElementById("result-status");
 const elResultBody    = document.getElementById("result-body");
 
+let selectedTemplate = null;
+let pollTimer = null;
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", async () => {
   const account = await initAuth();
@@ -41,7 +44,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   elBtnLoginMain.addEventListener("click", handleLogin);
   elBtnLogout.addEventListener("click", handleLogout);
   elSelectSub.addEventListener("change", onSubscriptionChange);
-  elSelectTpl.addEventListener("change", onTemplateChange);
   elBtnDeploy.addEventListener("click", onDeploy);
 
   document.querySelectorAll('input[name="scope"]').forEach((radio) => {
@@ -105,14 +107,9 @@ async function loadSubscriptions() {
 
 async function loadTemplates() {
   elTplLoading.classList.remove("hidden");
-  elSelectTpl.disabled = true;
   try {
     const data = await apiGet("/api/templates", null);
-    populateSelect(elSelectTpl, (data.templates || []).map((t) => ({
-      value: t,
-      label: t,
-    })), "Vælg template…");
-    elSelectTpl.disabled = false;
+    renderTemplateGroups(data.groups || []);
   } catch (e) {
     console.error("Failed to load templates:", e);
   } finally {
@@ -133,20 +130,53 @@ async function loadResourceGroups(subscriptionId) {
   }
 }
 
-// ── Event handlers ────────────────────────────────────────────────────────────
-async function onSubscriptionChange() {
-  const subId = elSelectSub.value;
-  if (!subId) return;
-  await loadResourceGroups(subId);
+// ── Template groups ───────────────────────────────────────────────────────────
+function renderTemplateGroups(groups) {
+  elTplGroups.innerHTML = "";
+
+  groups.forEach((group) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "template-group";
+
+    const header = document.createElement("div");
+    header.className = "group-header";
+    header.innerHTML = `
+      <svg class="group-chevron" viewBox="0 0 12 12" fill="none">
+        <path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      ${escapeHtml(group.name)}
+    `;
+
+    const items = document.createElement("div");
+    items.className = "group-items";
+
+    group.templates.forEach((tpl) => {
+      const btn = document.createElement("button");
+      btn.className = "template-item";
+      // Show just the filename, not the full path
+      const displayName = tpl.includes("/") ? tpl.split("/").pop() : tpl;
+      btn.textContent = displayName;
+      btn.title = tpl;
+      btn.addEventListener("click", () => selectTemplate(tpl, btn));
+      items.appendChild(btn);
+    });
+
+    header.addEventListener("click", () => {
+      header.classList.toggle("collapsed");
+      items.classList.toggle("hidden");
+    });
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(items);
+    elTplGroups.appendChild(wrapper);
+  });
 }
 
-async function onTemplateChange() {
-  const name = elSelectTpl.value;
-  if (!name) {
-    elPanelEmpty.classList.remove("hidden");
-    elPanelForm.classList.add("hidden");
-    return;
-  }
+async function selectTemplate(name, btnEl) {
+  // Update active state
+  document.querySelectorAll(".template-item.active").forEach((el) => el.classList.remove("active"));
+  btnEl.classList.add("active");
+  selectedTemplate = name;
 
   try {
     const data = await apiGet(`/api/templates/${encodeURIComponent(name)}`, null);
@@ -154,6 +184,13 @@ async function onTemplateChange() {
   } catch (e) {
     console.error("Failed to load template params:", e);
   }
+}
+
+// ── Event handlers ────────────────────────────────────────────────────────────
+async function onSubscriptionChange() {
+  const subId = elSelectSub.value;
+  if (!subId) return;
+  await loadResourceGroups(subId);
 }
 
 function renderTemplateForm(data) {
@@ -190,6 +227,18 @@ function renderTemplateForm(data) {
         if (String(param.defaultValue) === v) opt.selected = true;
         input.appendChild(opt);
       });
+    } else if (param.type === "object" || param.type === "array") {
+      input = document.createElement("textarea");
+      input.className = "json-input";
+      input.placeholder = param.type === "object" ? '{\n  "key": "value"\n}' : '[\n  "item1",\n  "item2"\n]';
+      if (param.defaultValue != null) {
+        try {
+          input.value = JSON.stringify(JSON.parse(param.defaultValue), null, 2);
+        } catch {
+          input.value = param.defaultValue;
+        }
+      }
+      input.addEventListener("input", () => validateJsonInput(input));
     } else {
       input = document.createElement("input");
       input.className = "input";
@@ -200,6 +249,7 @@ function renderTemplateForm(data) {
 
     input.id = `param-${param.name}`;
     input.dataset.paramName = param.name;
+    input.dataset.paramType = param.type;
 
     wrapper.appendChild(label);
     if (param.description) {
@@ -215,11 +265,25 @@ function renderTemplateForm(data) {
   elPanelEmpty.classList.add("hidden");
   elPanelForm.classList.remove("hidden");
   elDeployResult.classList.add("hidden");
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function validateJsonInput(textarea) {
+  if (textarea.value.trim() === "") {
+    textarea.classList.remove("invalid");
+    return;
+  }
+  try {
+    JSON.parse(textarea.value);
+    textarea.classList.remove("invalid");
+  } catch {
+    textarea.classList.add("invalid");
+  }
 }
 
 async function onDeploy() {
   const subId = elSelectSub.value;
-  const template = elSelectTpl.value;
+  const template = selectedTemplate;
   const deploymentName = elDeployName.value.trim();
   const scope = document.querySelector('input[name="scope"]:checked').value;
   const rgName = elSelectRg.value;
@@ -229,10 +293,33 @@ async function onDeploy() {
   if (!deploymentName) return alert("Angiv et deployment navn.");
   if (scope === "resourceGroup" && !rgName) return alert("Vælg en resource group.");
 
+  // Collect parameters with proper typing
   const parameters = {};
+  let hasJsonError = false;
   document.querySelectorAll("[data-param-name]").forEach((el) => {
-    parameters[el.dataset.paramName] = el.value;
+    const name = el.dataset.paramName;
+    const type = el.dataset.paramType;
+    const val = el.value;
+
+    if (val === "") return; // skip empty — use template default
+
+    if (type === "object" || type === "array") {
+      try {
+        parameters[name] = JSON.parse(val);
+      } catch {
+        hasJsonError = true;
+        el.classList.add("invalid");
+      }
+    } else if (type === "int") {
+      parameters[name] = parseInt(val, 10);
+    } else if (type === "bool") {
+      parameters[name] = val === "true";
+    } else {
+      parameters[name] = val;
+    }
   });
+
+  if (hasJsonError) return alert("Ret JSON-fejl i parametre før deploy.");
 
   const body = {
     templateName: template,
@@ -245,8 +332,13 @@ async function onDeploy() {
 
   elBtnDeploy.disabled = true;
   elDeployResult.classList.remove("hidden");
+
+  // Show status timeline
   elResultStatus.className = "result-status pending";
-  elResultStatus.textContent = "Deployer…";
+  elResultStatus.innerHTML = `
+    <div class="status-timeline">
+      <div class="status-step"><span class="status-dot active"></span> Sender deployment…</div>
+    </div>`;
   elResultBody.textContent = "";
 
   try {
@@ -263,13 +355,12 @@ async function onDeploy() {
     const json = await resp.json();
 
     if (resp.ok || resp.status === 201) {
-      elResultStatus.className = "result-status success";
-      elResultStatus.textContent = `✓ Deployment igangsat (HTTP ${resp.status})`;
+      // Extract deployment URL for status polling
+      const deployURL = buildStatusURL(body);
+      startStatusPolling(deployURL, json);
     } else {
-      elResultStatus.className = "result-status error";
-      elResultStatus.textContent = `✗ Fejl (HTTP ${resp.status})`;
+      showDeployError(resp.status, json);
     }
-    elResultBody.textContent = JSON.stringify(json, null, 2);
   } catch (e) {
     elResultStatus.className = "result-status error";
     elResultStatus.textContent = "✗ Netværksfejl";
@@ -277,6 +368,73 @@ async function onDeploy() {
   } finally {
     elBtnDeploy.disabled = false;
   }
+}
+
+// ── Deployment status polling ─────────────────────────────────────────────────
+function buildStatusURL(req) {
+  const base = "https://management.azure.com";
+  if (req.scope === "subscription") {
+    return `${base}/subscriptions/${req.subscriptionId}/providers/Microsoft.Resources/deployments/${req.deploymentName}?api-version=2022-09-01`;
+  }
+  return `${base}/subscriptions/${req.subscriptionId}/resourceGroups/${req.resourceGroupName}/providers/Microsoft.Resources/deployments/${req.deploymentName}?api-version=2022-09-01`;
+}
+
+function startStatusPolling(deployURL, initialResponse) {
+  if (pollTimer) clearInterval(pollTimer);
+
+  updateDeployTimeline("Running", initialResponse);
+
+  pollTimer = setInterval(async () => {
+    try {
+      const token = await getToken();
+      const data = await apiGet(`/api/deploy/status?url=${encodeURIComponent(deployURL)}`, token);
+      const state = data?.properties?.provisioningState || "Unknown";
+
+      updateDeployTimeline(state, data);
+
+      if (state === "Succeeded" || state === "Failed" || state === "Canceled") {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    } catch (e) {
+      console.error("Status poll error:", e);
+    }
+  }, 3000);
+}
+
+function updateDeployTimeline(state, data) {
+  const steps = [
+    { label: "Deployment sendt", done: true },
+    { label: "Validering", done: state !== "Running" || true },
+    { label: "Ressourcer oprettes…", active: state === "Running" },
+    { label: state === "Succeeded" ? "Fuldført ✓" : state === "Failed" ? "Fejlet ✗" : "Venter…",
+      done: state === "Succeeded",
+      error: state === "Failed" || state === "Canceled" },
+  ];
+
+  if (state === "Succeeded") {
+    elResultStatus.className = "result-status success";
+  } else if (state === "Failed" || state === "Canceled") {
+    elResultStatus.className = "result-status error";
+  } else {
+    elResultStatus.className = "result-status pending";
+  }
+
+  elResultStatus.innerHTML = `<div class="status-timeline">${steps.map((s) => {
+    let dotClass = "status-dot";
+    if (s.error) dotClass += " error";
+    else if (s.active) dotClass += " active";
+    else if (s.done) dotClass += " done";
+    return `<div class="status-step"><span class="${dotClass}"></span> ${s.label}</div>`;
+  }).join("")}</div>`;
+
+  elResultBody.textContent = JSON.stringify(data, null, 2);
+}
+
+function showDeployError(httpStatus, json) {
+  elResultStatus.className = "result-status error";
+  elResultStatus.textContent = `✗ Fejl (HTTP ${httpStatus})`;
+  elResultBody.textContent = JSON.stringify(json, null, 2);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -296,4 +454,10 @@ function populateSelect(selectEl, options, placeholder) {
     opt.textContent = label;
     selectEl.appendChild(opt);
   });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
 }

@@ -32,6 +32,7 @@ func main() {
 	mux.Handle("/api/subscriptions", handler.HandleListSubscriptions())
 	mux.Handle("/api/resource-groups", handler.HandleListResourceGroups())
 	mux.Handle("/api/deploy", handler.HandleDeploy(blobClient))
+	mux.Handle("/api/deploy/status", handler.HandleDeployStatus())
 
 	// Serve SPA — inject Azure config into index.html
 	subFS, err := fs.Sub(bicepdeployer.WebFS, "web")

@@ -14,8 +14,14 @@ type TemplateStore interface {
 	DownloadTemplate(ctx context.Context, name string) (string, error)
 }
 
-type templateListResponse struct {
+// TemplateGroup groups templates by folder prefix.
+type TemplateGroup struct {
+	Name      string   `json:"name"`
 	Templates []string `json:"templates"`
+}
+
+type templateListResponse struct {
+	Groups []TemplateGroup `json:"groups"`
 }
 
 type templateDetailResponse struct {
@@ -24,6 +30,7 @@ type templateDetailResponse struct {
 }
 
 // HandleListTemplates serves GET /api/templates
+// Groups templates by virtual directory (e.g. "networking/vnet.bicep" → group "networking")
 func HandleListTemplates(store TemplateStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		names, err := store.ListTemplates(r.Context())
@@ -31,11 +38,34 @@ func HandleListTemplates(store TemplateStore) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "failed to list templates: "+err.Error())
 			return
 		}
-		if names == nil {
-			names = []string{}
-		}
-		writeJSON(w, http.StatusOK, templateListResponse{Templates: names})
+
+		groups := groupTemplates(names)
+		writeJSON(w, http.StatusOK, templateListResponse{Groups: groups})
 	}
+}
+
+// groupTemplates organizes flat blob paths into groups by their directory prefix.
+// Files without a prefix go into a "General" group.
+func groupTemplates(names []string) []TemplateGroup {
+	groupMap := make(map[string][]string)
+	var order []string
+
+	for _, name := range names {
+		group := "General"
+		if idx := strings.LastIndex(name, "/"); idx != -1 {
+			group = name[:idx]
+		}
+		if _, exists := groupMap[group]; !exists {
+			order = append(order, group)
+		}
+		groupMap[group] = append(groupMap[group], name)
+	}
+
+	groups := make([]TemplateGroup, 0, len(order))
+	for _, g := range order {
+		groups = append(groups, TemplateGroup{Name: g, Templates: groupMap[g]})
+	}
+	return groups
 }
 
 // HandleGetTemplate serves GET /api/templates/{name}

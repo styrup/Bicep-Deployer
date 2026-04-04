@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // DeployRequest is the JSON body for POST /api/deploy.
@@ -19,7 +20,7 @@ type DeployRequest struct {
 	SubscriptionID    string            `json:"subscriptionId"`
 	ResourceGroupName string            `json:"resourceGroupName"` // only for scope=resourceGroup
 	DeploymentName    string            `json:"deploymentName"`
-	Parameters        map[string]string `json:"parameters"`
+	Parameters        map[string]json.RawMessage `json:"parameters"`
 }
 
 // HandleDeploy serves POST /api/deploy
@@ -120,13 +121,16 @@ func compileBicep(ctx context.Context, bicepContent string) (json.RawMessage, er
 
 // buildDeploymentPayload constructs the ARM deployment request body.
 // Empty parameter values are omitted so ARM uses the template's defaults.
-func buildDeploymentPayload(template json.RawMessage, params map[string]string) ([]byte, error) {
+// Values are sent as-is (string, int, bool, object, array) from the JSON body.
+func buildDeploymentPayload(template json.RawMessage, params map[string]json.RawMessage) ([]byte, error) {
 	armParams := make(map[string]any, len(params))
 	for k, v := range params {
-		if v == "" {
+		// Skip empty strings
+		var str string
+		if json.Unmarshal(v, &str) == nil && str == "" {
 			continue
 		}
-		armParams[k] = map[string]any{"value": v}
+		armParams[k] = map[string]any{"value": json.RawMessage(v)}
 	}
 
 	payload := map[string]any{
@@ -193,4 +197,38 @@ func validateDeployRequest(req DeployRequest) error {
 		return fmt.Errorf("resourceGroupName is required for scope=resourceGroup")
 	}
 	return nil
+}
+
+// HandleDeployStatus serves GET /api/deploy/status?url=<ARM deployment URL>
+// It proxies the deployment status check using the user's Bearer token.
+func HandleDeployStatus() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		token := extractBearerToken(r)
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "Authorization header required")
+			return
+		}
+
+		statusURL := r.URL.Query().Get("url")
+		if statusURL == "" {
+			writeError(w, http.StatusBadRequest, "url query parameter required")
+			return
+		}
+
+		// Only allow ARM management URLs
+		if !strings.HasPrefix(statusURL, armBaseURL) {
+			writeError(w, http.StatusBadRequest, "url must be an ARM management URL")
+			return
+		}
+
+		body, status, err := armGet(r.Context(), statusURL, token)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(body)
+	}
 }
