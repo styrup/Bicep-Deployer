@@ -15,6 +15,8 @@ A web-based system for deploying Azure Bicep templates directly from the browser
 - 📊 **Structured logging** — JSON logs via `slog` with multi-handler support
 - 🌑 **Dark, minimalist Nordic design**
 
+![Bicep Deployer UI](screenshots/main.png)
+
 ## Prerequisites
 
 1. **Go 1.21+**
