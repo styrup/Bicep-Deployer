@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 	bicepdeployer "github.com/user/bicep-deployer"
 	"github.com/user/bicep-deployer/internal/config"
 	"github.com/user/bicep-deployer/internal/handler"
+	"github.com/user/bicep-deployer/internal/logging"
 	"github.com/user/bicep-deployer/internal/middleware"
 	"github.com/user/bicep-deployer/internal/storage"
 )
@@ -24,12 +26,21 @@ import (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config error: %v", err)
+		slog.Error("config error", "error", err)
+		os.Exit(1)
 	}
+
+	cleanup, err := logging.Setup(cfg.LogLevel, cfg.LogFile)
+	if err != nil {
+		slog.Error("logging setup error", "error", err)
+		os.Exit(1)
+	}
+	defer cleanup()
 
 	blobClient, err := storage.New(cfg.StorageAccountName, cfg.StorageContainerName, cfg.StorageConnectionString)
 	if err != nil {
-		log.Fatalf("storage client error: %v", err)
+		slog.Error("storage client error", "error", err)
+		os.Exit(1)
 	}
 
 	cachedStore := handler.NewCachedStore(blobClient, 2*time.Minute)
@@ -53,12 +64,14 @@ func main() {
 	// Serve SPA — inject Azure config into index.html
 	subFS, err := fs.Sub(bicepdeployer.WebFS, "web")
 	if err != nil {
-		log.Fatalf("embed web FS error: %v", err)
+		slog.Error("embed web FS error", "error", err)
+		os.Exit(1)
 	}
 	mux.Handle("/", spaHandler(subFS, cfg))
 
-	// Apply middleware: security headers + rate limiting (20 req/s burst 40 per IP)
+	// Apply middleware: request logging + security headers + rate limiting
 	wrapped := middleware.Chain(mux,
+		middleware.RequestLogger,
 		middleware.SecurityHeaders,
 		middleware.RateLimiter(rate.Limit(20), 40),
 	)
@@ -77,21 +90,23 @@ func main() {
 	defer stop()
 
 	go func() {
-		log.Printf("bicep-deployer listening on http://localhost%s", addr)
+		slog.Info("server started", "addr", "http://localhost"+addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("server error: %v", err)
+			slog.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("shutting down gracefully…")
+	slog.Info("shutting down gracefully")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("shutdown error: %v", err)
+		slog.Error("shutdown error", "error", err)
+		os.Exit(1)
 	}
-	log.Println("server stopped")
+	slog.Info("server stopped")
 }
 
 // spaHandler serves the embedded web/ directory.

@@ -16,6 +16,8 @@ type Config struct {
 	StorageConnectionString string
 	AppTitle                string
 	AppIcon                 string
+	LogLevel                string
+	LogFile                 string
 }
 
 func Load() (*Config, error) {
@@ -31,6 +33,8 @@ func Load() (*Config, error) {
 		StorageConnectionString: os.Getenv("AZURE_STORAGE_CONNECTION_STRING"),
 		AppTitle:                getEnv("APP_TITLE", "Bicep Deployer"),
 		AppIcon:                 getEnv("APP_ICON", ""),
+		LogLevel:                getEnv("LOG_LEVEL", "info"),
+		LogFile:                 os.Getenv("LOG_FILE"),
 	}
 
 	if err := cfg.validate(); err != nil {
