@@ -1,4 +1,5 @@
 metadata description = 'Creates an Azure Container Apps environment with a container app'
+metadata name = 'Container App'
 metadata author = 'Platform Team'
 metadata version = '1.0'
 metadata category = 'Compute'

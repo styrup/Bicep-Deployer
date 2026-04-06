@@ -1,4 +1,5 @@
 metadata description = 'Creates a Virtual Network with configurable subnets and NSG'
+metadata name = 'Virtual Network'
 metadata author = 'Platform Team'
 metadata version = '1.2'
 metadata category = 'Networking'

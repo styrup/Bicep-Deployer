@@ -1,4 +1,5 @@
 metadata description = 'Creates an Azure Key Vault with configurable access policies and secrets'
+metadata name = 'Key Vault'
 metadata author = 'Security Team'
 metadata version = '1.1'
 metadata category = 'Security'

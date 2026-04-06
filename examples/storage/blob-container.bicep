@@ -1,4 +1,5 @@
 metadata description = 'Creates a Blob container with optional lifecycle policy for auto-cleanup'
+metadata name = 'Blob Container'
 metadata author = 'Platform Team'
 metadata version = '1.0'
 metadata category = 'Storage'
