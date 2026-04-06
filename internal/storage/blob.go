@@ -66,7 +66,7 @@ func (b *BlobClient) DownloadTemplate(ctx context.Context, name string) (string,
 	if err != nil {
 		return "", fmt.Errorf("download blob %q: %w", name, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -30,7 +30,7 @@ func Setup(levelStr, filePath string) (cleanup func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		closers = append(closers, func() { f.Close() })
+		closers = append(closers, func() { _ = f.Close() })
 		handlers = append(handlers, slog.NewJSONHandler(f, &slog.HandlerOptions{Level: level}))
 	}
 
