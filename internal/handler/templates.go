@@ -32,6 +32,7 @@ type templateDetailResponse struct {
 }
 
 // HandleListTemplates serves GET /api/templates
+// Only templates with `metadata published = 'true'` are included.
 // Groups templates by virtual directory (e.g. "networking/vnet.bicep" → group "networking")
 func HandleListTemplates(store TemplateStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +42,20 @@ func HandleListTemplates(store TemplateStore) http.HandlerFunc {
 			return
 		}
 
-		groups := groupTemplates(names)
+		// Filter to published templates only.
+		var published []string
+		for _, name := range names {
+			content, err := store.DownloadTemplate(r.Context(), name)
+			if err != nil {
+				continue
+			}
+			meta := bicep.ParseMetadata(content)
+			if strings.EqualFold(meta["published"], "true") {
+				published = append(published, name)
+			}
+		}
+
+		groups := groupTemplates(published)
 		writeJSON(w, http.StatusOK, templateListResponse{Groups: groups})
 	}
 }

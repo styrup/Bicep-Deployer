@@ -2,6 +2,7 @@ metadata description = 'Creates an Azure Key Vault with configurable access poli
 metadata author = 'Security Team'
 metadata version = '1.1'
 metadata category = 'Security'
+metadata published = 'true'
 
 @description('Name of the Key Vault (must be globally unique)')
 param keyVaultName string
