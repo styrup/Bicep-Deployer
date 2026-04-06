@@ -8,6 +8,11 @@ Et webbaseret system til at deploye Azure Bicep templates direkte fra browseren 
 - 📦 **Central template-lager** i Azure Blob Storage
 - ⚙️ **Auto-genererede formularer** ud fra `param`-deklarationer i `.bicep` filer
 - 🚀 **Deployment på Resource Group eller Subscription niveau**
+- 🔗 **Modul-support** — templates der refererer lokale moduler downloades automatisk
+- 🏷️ **Template-styring** — vis/skjul templates via `metadata published` og vis pæne navne via `metadata name`
+- 🎨 **Konfigurerbar branding** — titel og ikon kan ændres via env vars
+- 🔒 **Sikkerhedshærdet** — rate limiting, security headers, SSRF-beskyttelse, path traversal validering
+- 📊 **Struktureret logging** — JSON-logs via `slog` med multi-handler support
 - 🌑 **Mørkt, minimalistisk nordisk design**
 
 ## Forudsætninger
@@ -43,18 +48,49 @@ cp .env.example .env
 | `STORAGE_ACCOUNT_NAME` | Storage account (bruger Managed Identity) | En af to |
 | `STORAGE_CONTAINER_NAME` | Blob container med `.bicep` filer (default: `bicep`) | ✅ |
 | `PORT` | HTTP port (default: `8080`) | ❌ |
+| `APP_TITLE` | Appens titel (default: `Bicep Deployer`) | ❌ |
+| `APP_ICON` | Emoji (`🔧`) eller billed-URL (`https://...`) | ❌ |
+| `LOG_LEVEL` | Log niveau: `debug`, `info`, `warn`, `error` (default: `info`) | ❌ |
+| `LOG_FILE` | Valgfri fil-sti for log-output (ud over stdout) | ❌ |
 
 ## Kørsel
 
 ```bash
-go mod tidy
-go run ./cmd/server/main.go
+make tidy     # go mod tidy
+make run      # go run ./cmd/server/main.go
 # Åbn http://localhost:8080
+```
+
+```bash
+# Build
+make build    # producerer ./bicep-deployer
+
+# Test
+go test ./...
 ```
 
 ## Bicep template format
 
-Templates skal ligge som `.bicep` filer i din Blob Storage container. Parametre parses automatisk:
+Templates skal ligge som `.bicep` filer i din Blob Storage container.
+
+### Synlighed og navngivning
+
+Kun templates med `metadata published = 'true'` vises i UI'et. Brug `metadata name` til at styre det viste navn:
+
+```bicep
+metadata name = 'Storage Account'
+metadata description = 'Creates a Storage Account with configurable SKU'
+metadata author = 'Platform Team'
+metadata version = '1.0'
+metadata category = 'Storage'
+metadata published = 'true'
+```
+
+Templates uden `metadata published = 'true'` (f.eks. moduler) skjules automatisk.
+
+### Parametre
+
+Parametre parses automatisk fra `param`-deklarationer:
 
 ```bicep
 @description('Azure region to deploy resources into')
@@ -68,24 +104,40 @@ param instanceCount int = 2
 param enableDiagnostics bool = false
 ```
 
+### Moduler
+
+Templates kan referere lokale moduler med relative stier. Modulerne downloades automatisk fra Blob Storage under kompilering:
+
+```bicep
+module budget './modules/budget.bicep' = if (monthlyBudgetUSD > 0) {
+  scope: rg
+  name: 'budgetModule'
+  params: { ... }
+}
+```
+
 ## Projektstruktur
 
 ```
 bicep-deployer/
-├── cmd/server/main.go          # HTTP server entry point
+├── cmd/server/main.go              # HTTP server, middleware chain, graceful shutdown
 ├── internal/
-│   ├── config/config.go        # Konfiguration fra env vars
-│   ├── bicep/parser.go         # Parser Bicep param-deklarationer
-│   ├── storage/blob.go         # Azure Blob Storage klient
+│   ├── config/config.go            # Konfiguration fra env vars
+│   ├── bicep/parser.go             # Parser Bicep param-deklarationer og metadata
+│   ├── storage/blob.go             # Azure Blob Storage klient
+│   ├── logging/logging.go          # slog setup, MultiHandler, log levels
+│   ├── middleware/middleware.go     # Security headers, rate limiting, request logging
 │   └── handler/
-│       ├── templates.go        # GET /api/templates
-│       ├── azure.go            # GET /api/subscriptions, /api/resource-groups
-│       ├── deploy.go           # POST /api/deploy
-│       └── helpers.go          # JSON/auth utilities
-├── web/                        # Embedded frontend (HTML/CSS/JS)
-├── deploy/                     # Azure Container Apps deployment
-│   ├── main.bicep              # Infrastructure-as-code
-│   └── main.bicepparam         # Parameter fil
+│       ├── templates.go            # GET /api/templates (filtrering + display names)
+│       ├── azure.go                # GET /api/subscriptions, /api/resource-groups
+│       ├── deploy.go               # POST /api/deploy (modul-download, kompilering)
+│       ├── cache.go                # CachedStore — TTL cache for templates
+│       └── helpers.go              # JSON/auth utilities
+├── web/                            # Embedded frontend (HTML/CSS/JS)
+├── examples/                       # Eksempel Bicep templates
+├── deploy/                         # Azure Container Apps deployment
+│   ├── main.bicep                  # Infrastructure-as-code
+│   └── main.bicepparam             # Parameter fil
 ├── Dockerfile
 └── .dockerignore
 ```
@@ -123,3 +175,13 @@ Tilføj den nye Container App URL som Redirect URI (type: **Single-page applicat
 - **Container App Environment** — hosting-miljø
 - **Container App** — selve appen med Managed Identity, scale-to-zero, HTTPS
 - **Role Assignment** — giver appen `Storage Blob Data Reader` på din Storage Account
+
+## Sikkerhed
+
+- **Rate limiting** — 20 req/s per IP med burst 40
+- **Security headers** — CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy
+- **Request timeouts** — read 10s, write 60s, idle 120s
+- **Path traversal beskyttelse** — template-navne valideres mod `..` og absolutte stier
+- **SSRF-hærdning** — deploy status proxy accepterer kun ARM deployment-URLs
+- **Graceful shutdown** — SIGINT/SIGTERM med 10s drain
+- **Health check** — `GET /healthz` til liveness/readiness probes
