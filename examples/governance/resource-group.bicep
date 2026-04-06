@@ -37,11 +37,14 @@ param budgetAlertEmail string = ''
 @description('Additional tags to apply')
 param tags object = {}
 
+@description('Creation date tag (auto-generated)')
+param createdDate string = utcNow('yyyy-MM-dd')
+
 var defaultTags = {
   environment: environment
   owner: owner
   managedBy: 'bicep-deployer'
-  createdDate: utcNow('yyyy-MM-dd')
+  createdDate: createdDate
 }
 
 resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
@@ -50,32 +53,13 @@ resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
   tags: union(defaultTags, tags)
 }
 
-resource budget 'Microsoft.Consumption/budgets@2023-11-01' = if (monthlyBudgetUSD > 0) {
-  name: '${resourceGroupName}-budget'
+module budget './modules/budget.bicep' = if (monthlyBudgetUSD > 0) {
   scope: rg
-  properties: {
-    category: 'Cost'
-    amount: monthlyBudgetUSD
-    timeGrain: 'Monthly'
-    timePeriod: {
-      startDate: '${utcNow('yyyy-MM')}-01'
-    }
-    notifications: {
-      actual80pct: {
-        enabled: budgetAlertEmail != ''
-        operator: 'GreaterThanOrEqualTo'
-        threshold: 80
-        contactEmails: budgetAlertEmail != '' ? [budgetAlertEmail] : []
-        thresholdType: 'Actual'
-      }
-      forecast100pct: {
-        enabled: budgetAlertEmail != ''
-        operator: 'GreaterThanOrEqualTo'
-        threshold: 100
-        contactEmails: budgetAlertEmail != '' ? [budgetAlertEmail] : []
-        thresholdType: 'Forecasted'
-      }
-    }
+  name: 'budgetModule'
+  params: {
+    resourceGroupName: rg.name
+    monthlyBudgetUSD: monthlyBudgetUSD
+    budgetAlertEmail: budgetAlertEmail
   }
 }
 

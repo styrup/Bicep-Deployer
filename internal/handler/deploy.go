@@ -67,7 +67,7 @@ func HandleDeploy(store TemplateStore) http.HandlerFunc {
 		}
 
 		// Build ARM deployment payload
-		payload, err := buildDeploymentPayload(armJSON, req.Parameters)
+		payload, err := buildDeploymentPayload(armJSON, req.Scope, req.Parameters)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "build deployment payload: "+err.Error())
 			return
@@ -200,8 +200,9 @@ func writeFile(filePath, content string) error {
 
 // buildDeploymentPayload constructs the ARM deployment request body.
 // Empty parameter values are omitted so ARM uses the template's defaults.
-// Values are sent as-is (string, int, bool, object, array) from the JSON body.
-func buildDeploymentPayload(template json.RawMessage, params map[string]json.RawMessage) ([]byte, error) {
+// For subscription-scope deployments, ARM requires a top-level "location"
+// field; it is extracted from the "location" parameter when present.
+func buildDeploymentPayload(template json.RawMessage, scope string, params map[string]json.RawMessage) ([]byte, error) {
 	armParams := make(map[string]any, len(params))
 	for k, v := range params {
 		// Skip empty strings
@@ -218,6 +219,17 @@ func buildDeploymentPayload(template json.RawMessage, params map[string]json.Raw
 			"template":   template,
 			"parameters": armParams,
 		},
+	}
+
+	// Subscription-scope deployments require a top-level "location" that tells
+	// ARM where to store deployment metadata.
+	if scope == "subscription" {
+		if loc, ok := params["location"]; ok {
+			var locStr string
+			if json.Unmarshal(loc, &locStr) == nil && locStr != "" {
+				payload["location"] = locStr
+			}
+		}
 	}
 
 	return json.Marshal(payload)
