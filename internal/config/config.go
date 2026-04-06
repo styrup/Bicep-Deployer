@@ -14,6 +14,8 @@ type Config struct {
 	StorageAccountName      string
 	StorageContainerName    string
 	StorageConnectionString string
+	AppTitle                string
+	AppIcon                 string
 }
 
 func Load() (*Config, error) {
@@ -27,6 +29,8 @@ func Load() (*Config, error) {
 		StorageAccountName:      os.Getenv("STORAGE_ACCOUNT_NAME"),
 		StorageContainerName:    getEnv("STORAGE_CONTAINER_NAME", "bicep"),
 		StorageConnectionString: os.Getenv("AZURE_STORAGE_CONNECTION_STRING"),
+		AppTitle:                getEnv("APP_TITLE", "Bicep Deployer"),
+		AppIcon:                 getEnv("APP_ICON", ""),
 	}
 
 	if err := cfg.validate(); err != nil {

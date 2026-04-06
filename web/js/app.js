@@ -32,8 +32,37 @@ const elResultBody    = document.getElementById("result-body");
 let selectedTemplate = null;
 let pollTimer = null;
 
+const defaultIconSVG = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/** Render the app icon into a container element. Supports image URLs, emoji, or falls back to the default SVG. */
+function renderIcon(container, size) {
+  const icon = window.APP_ICON;
+  if (!icon) {
+    container.innerHTML = defaultIconSVG;
+    container.querySelector("svg").style.width = size;
+    container.querySelector("svg").style.height = size;
+    return;
+  }
+  if (icon.startsWith("http://") || icon.startsWith("https://")) {
+    const img = document.createElement("img");
+    img.src = icon;
+    img.alt = "";
+    img.style.width = size;
+    img.style.height = size;
+    img.style.objectFit = "contain";
+    container.appendChild(img);
+  } else {
+    container.textContent = icon;
+    container.style.fontSize = size;
+    container.style.lineHeight = "1";
+  }
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", async () => {
+  renderIcon(document.getElementById("header-icon"), "20px");
+  renderIcon(document.getElementById("login-icon"), "48px");
+
   const account = await initAuth();
   if (account) {
     showApp(account);

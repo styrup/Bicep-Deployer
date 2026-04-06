@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bicep Deployer</title>
+  <title>{{.AppTitle}}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/styles.css" />
@@ -12,10 +12,8 @@
   <header class="app-header">
     <div class="header-inner">
       <div class="brand">
-        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span>Bicep Deployer</span>
+        <span class="brand-icon" id="header-icon"></span>
+        <span>{{.AppTitle}}</span>
       </div>
       <div class="auth-section">
         <div id="auth-logged-out" class="hidden">
@@ -33,10 +31,8 @@
     <!-- Login prompt -->
     <section id="section-login" class="center-section">
       <div class="login-card">
-        <svg class="login-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <h1>Bicep Deployer</h1>
+        <span class="login-icon" id="login-icon"></span>
+        <h1>{{.AppTitle}}</h1>
         <p class="login-subtitle">Deploy Azure Bicep templates direkte fra din browser ved hjælp af din Azure-identitet.</p>
         <button id="btn-login-main" class="btn btn-primary btn-large">Log ind med Azure</button>
       </div>
@@ -122,6 +118,7 @@
   <script>
     window.AZURE_TENANT_ID = "{{.TenantID}}";
     window.AZURE_CLIENT_ID = "{{.ClientID}}";
+    window.APP_ICON = "{{.AppIcon}}";
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.27.0/lib/msal-browser.min.js"></script>
   <script src="/js/auth.js"></script>
