@@ -2,6 +2,7 @@ metadata description = 'Creates a Resource Group with enforced tags and optional
 metadata author = 'Platform Team'
 metadata version = '1.0'
 metadata category = 'Governance'
+metadata published = 'true'
 
 targetScope = 'subscription'
 

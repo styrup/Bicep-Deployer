@@ -2,6 +2,7 @@ metadata description = 'Creates a Linux web app on Azure App Service with Applic
 metadata author = 'Platform Team'
 metadata version = '2.0'
 metadata category = 'Compute'
+metadata published = 'true'
 
 @description('Name of the web app (must be globally unique)')
 param webAppName string

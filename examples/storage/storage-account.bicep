@@ -2,6 +2,7 @@ metadata description = 'Creates a Storage Account with configurable SKU and acce
 metadata author = 'Platform Team'
 metadata version = '1.0'
 metadata category = 'Storage'
+metadata published = 'true'
 
 @description('Name of the storage account (must be globally unique)')
 param storageAccountName string

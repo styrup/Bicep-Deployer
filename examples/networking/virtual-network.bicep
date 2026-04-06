@@ -2,6 +2,7 @@ metadata description = 'Creates a Virtual Network with configurable subnets and 
 metadata author = 'Platform Team'
 metadata version = '1.2'
 metadata category = 'Networking'
+metadata published = 'true'
 
 @description('Name of the virtual network')
 param vnetName string

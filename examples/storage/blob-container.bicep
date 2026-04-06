@@ -2,6 +2,7 @@ metadata description = 'Creates a Blob container with optional lifecycle policy 
 metadata author = 'Platform Team'
 metadata version = '1.0'
 metadata category = 'Storage'
+metadata published = 'true'
 
 @description('Name of the existing storage account')
 param storageAccountName string

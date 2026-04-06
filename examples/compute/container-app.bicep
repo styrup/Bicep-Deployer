@@ -2,6 +2,7 @@ metadata description = 'Creates an Azure Container Apps environment with a conta
 metadata author = 'Platform Team'
 metadata version = '1.0'
 metadata category = 'Compute'
+metadata published = 'true'
 
 @description('Name of the container app')
 param appName string
