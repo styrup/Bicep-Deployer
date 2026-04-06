@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -58,10 +59,19 @@ func HandleDeploy(store TemplateStore) http.HandlerFunc {
 			return
 		}
 
+		slog.Info("deploying template",
+			"template", req.TemplateName,
+			"scope", req.Scope,
+			"subscription", req.SubscriptionID,
+			"resourceGroup", req.ResourceGroupName,
+			"deployment", req.DeploymentName,
+		)
+
 		// Compile Bicep → ARM JSON using bicep CLI.
 		// Passes the store so that referenced modules can be downloaded too.
 		armJSON, err := compileBicep(r.Context(), store, req.TemplateName, bicepContent)
 		if err != nil {
+			slog.Error("bicep compilation failed", "template", req.TemplateName, "error", err)
 			writeError(w, http.StatusInternalServerError, "bicep compilation failed: "+err.Error())
 			return
 		}
@@ -79,9 +89,12 @@ func HandleDeploy(store TemplateStore) http.HandlerFunc {
 		// Send PUT request to ARM
 		result, status, err := armPut(r.Context(), deployURL, token, payload)
 		if err != nil {
+			slog.Error("ARM deployment failed", "template", req.TemplateName, "error", err)
 			writeError(w, http.StatusInternalServerError, "ARM deployment failed: "+err.Error())
 			return
 		}
+
+		slog.Info("deployment submitted", "template", req.TemplateName, "deployment", req.DeploymentName, "status", status)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
