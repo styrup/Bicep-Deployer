@@ -360,6 +360,6 @@ func HandleDeployStatus() http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		w.Write(body)
+		_, _ = w.Write(body)
 	}
 }
