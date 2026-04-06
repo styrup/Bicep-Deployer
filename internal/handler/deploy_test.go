@@ -150,3 +150,71 @@ func TestDownloadModulesNested(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateTemplateName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"valid simple", "storage.bicep", false},
+		{"valid nested", "governance/resource-group.bicep", false},
+		{"path traversal", "../secret.bicep", true},
+		{"path traversal mid", "governance/../../secret.bicep", true},
+		{"absolute unix", "/etc/passwd.bicep", true},
+		{"absolute windows", "\\secret.bicep", true},
+		{"wrong extension", "template.json", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateTemplateName(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateTemplateName(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestIsDeploymentStatusURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{
+			"valid rg deployment",
+			"https://management.azure.com/subscriptions/abc-123/resourceGroups/myRg/providers/Microsoft.Resources/deployments/myDeploy?api-version=2022-09-01",
+			true,
+		},
+		{
+			"valid subscription deployment",
+			"https://management.azure.com/subscriptions/abc-123/providers/Microsoft.Resources/deployments/myDeploy?api-version=2022-09-01",
+			true,
+		},
+		{
+			"arbitrary ARM endpoint blocked",
+			"https://management.azure.com/subscriptions/abc-123/resourceGroups/myRg/providers/Microsoft.Compute/virtualMachines?api-version=2023-01-01",
+			false,
+		},
+		{
+			"external URL blocked",
+			"https://evil.com/subscriptions/abc/providers/Microsoft.Resources/deployments/x?api-version=2022-09-01",
+			false,
+		},
+		{
+			"empty blocked",
+			"",
+			false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isDeploymentStatusURL(tt.url)
+			if got != tt.want {
+				t.Errorf("isDeploymentStatusURL(%q) = %v, want %v", tt.url, got, tt.want)
+			}
+		})
+	}
+}
