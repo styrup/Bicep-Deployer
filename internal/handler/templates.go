@@ -110,6 +110,10 @@ func HandleGetTemplate(store TemplateStore) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "template name is required")
 			return
 		}
+		if strings.Contains(name, "..") {
+			writeError(w, http.StatusBadRequest, "invalid template name")
+			return
+		}
 
 		content, err := store.DownloadTemplate(r.Context(), name)
 		if err != nil {

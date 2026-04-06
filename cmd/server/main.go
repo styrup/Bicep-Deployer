@@ -1,15 +1,23 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"io/fs"
 	"log"
 	"net/http"
+	"os/signal"
 	"strings"
+	"syscall"
 	"text/template"
+	"time"
+
+	"golang.org/x/time/rate"
 
 	bicepdeployer "github.com/user/bicep-deployer"
 	"github.com/user/bicep-deployer/internal/config"
 	"github.com/user/bicep-deployer/internal/handler"
+	"github.com/user/bicep-deployer/internal/middleware"
 	"github.com/user/bicep-deployer/internal/storage"
 )
 
@@ -24,14 +32,22 @@ func main() {
 		log.Fatalf("storage client error: %v", err)
 	}
 
+	cachedStore := handler.NewCachedStore(blobClient, 2*time.Minute)
+
 	mux := http.NewServeMux()
 
+	// Health check for Container Apps / Kubernetes probes
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
 	// API routes
-	mux.Handle("/api/templates", handler.HandleListTemplates(blobClient))
-	mux.Handle("/api/templates/", handler.HandleGetTemplate(blobClient))
+	mux.Handle("/api/templates", handler.HandleListTemplates(cachedStore))
+	mux.Handle("/api/templates/", handler.HandleGetTemplate(cachedStore))
 	mux.Handle("/api/subscriptions", handler.HandleListSubscriptions())
 	mux.Handle("/api/resource-groups", handler.HandleListResourceGroups())
-	mux.Handle("/api/deploy", handler.HandleDeploy(blobClient))
+	mux.Handle("/api/deploy", handler.HandleDeploy(cachedStore))
 	mux.Handle("/api/deploy/status", handler.HandleDeployStatus())
 
 	// Serve SPA — inject Azure config into index.html
@@ -41,11 +57,41 @@ func main() {
 	}
 	mux.Handle("/", spaHandler(subFS, cfg))
 
+	// Apply middleware: security headers + rate limiting (20 req/s burst 40 per IP)
+	wrapped := middleware.Chain(mux,
+		middleware.SecurityHeaders,
+		middleware.RateLimiter(rate.Limit(20), 40),
+	)
+
 	addr := ":" + cfg.Port
-	log.Printf("bicep-deployer listening on http://localhost%s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("server error: %v", err)
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      wrapped,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
+
+	// Graceful shutdown on SIGINT / SIGTERM
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		log.Printf("bicep-deployer listening on http://localhost%s", addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Println("shutting down gracefully…")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("shutdown error: %v", err)
+	}
+	log.Println("server stopped")
 }
 
 // spaHandler serves the embedded web/ directory.

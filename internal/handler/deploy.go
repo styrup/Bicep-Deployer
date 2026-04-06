@@ -278,6 +278,9 @@ func validateDeployRequest(req DeployRequest) error {
 	if req.TemplateName == "" {
 		return fmt.Errorf("templateName is required")
 	}
+	if err := validateTemplateName(req.TemplateName); err != nil {
+		return err
+	}
 	if req.SubscriptionID == "" {
 		return fmt.Errorf("subscriptionId is required")
 	}
@@ -288,6 +291,30 @@ func validateDeployRequest(req DeployRequest) error {
 		return fmt.Errorf("resourceGroupName is required for scope=resourceGroup")
 	}
 	return nil
+}
+
+// validateTemplateName rejects path traversal and absolute paths.
+func validateTemplateName(name string) error {
+	if strings.Contains(name, "..") {
+		return fmt.Errorf("templateName must not contain '..'")
+	}
+	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "\\") {
+		return fmt.Errorf("templateName must be a relative path")
+	}
+	if !strings.HasSuffix(name, ".bicep") {
+		return fmt.Errorf("templateName must end with .bicep")
+	}
+	return nil
+}
+
+// deploymentStatusRe matches ARM deployment URLs at resource-group or subscription scope.
+var deploymentStatusRe = regexp.MustCompile(
+	`^https://management\.azure\.com/subscriptions/[^/]+(/resourceGroups/[^/]+)?/providers/Microsoft\.Resources/deployments/[^/]+\?api-version=`,
+)
+
+// isDeploymentStatusURL returns true only for ARM deployment resource URLs.
+func isDeploymentStatusURL(u string) bool {
+	return deploymentStatusRe.MatchString(u)
 }
 
 // HandleDeployStatus serves GET /api/deploy/status?url=<ARM deployment URL>
@@ -306,9 +333,9 @@ func HandleDeployStatus() http.HandlerFunc {
 			return
 		}
 
-		// Only allow ARM management URLs
-		if !strings.HasPrefix(statusURL, armBaseURL) {
-			writeError(w, http.StatusBadRequest, "url must be an ARM management URL")
+		// Only allow ARM deployment status URLs (prevent SSRF to arbitrary ARM endpoints).
+		if !isDeploymentStatusURL(statusURL) {
+			writeError(w, http.StatusBadRequest, "url must be an ARM deployment status URL")
 			return
 		}
 
