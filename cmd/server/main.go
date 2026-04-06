@@ -80,6 +80,8 @@ func serveIndex(w http.ResponseWriter, r *http.Request, fsys fs.FS, cfg *config.
 	_ = tmpl.Execute(w, map[string]string{
 		"TenantID": cfg.AzureTenantID,
 		"ClientID": cfg.AzureClientID,
+		"AppTitle": cfg.AppTitle,
+		"AppIcon":  cfg.AppIcon,
 	})
 }
 
