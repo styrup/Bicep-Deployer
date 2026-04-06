@@ -50,7 +50,7 @@ func main() {
 	// Health check for Container Apps / Kubernetes probes
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	})
 
 	// API routes
@@ -154,6 +154,6 @@ func fileExists(fsys fs.FS, path string) bool {
 	if err != nil {
 		return false
 	}
-	f.Close()
+	_ = f.Close()
 	return true
 }

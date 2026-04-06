@@ -98,7 +98,7 @@ func HandleDeploy(store TemplateStore) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		w.Write(result)
+		_, _ = w.Write(result)
 	}
 }
 
@@ -117,7 +117,7 @@ func compileBicep(ctx context.Context, store TemplateStore, templateName, bicepC
 	if err != nil {
 		return nil, fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Write the main template using its original blob path so that relative
 	// module references resolve correctly.
@@ -277,7 +277,7 @@ func armPut(ctx context.Context, url, token string, body []byte) ([]byte, int, e
 	if err != nil {
 		return nil, 0, fmt.Errorf("ARM PUT request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -360,6 +360,6 @@ func HandleDeployStatus() http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		w.Write(body)
+		_, _ = w.Write(body)
 	}
 }

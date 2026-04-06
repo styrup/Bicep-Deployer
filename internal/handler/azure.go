@@ -28,11 +28,11 @@ func HandleListSubscriptions() http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		w.Write(body)
+		_, _ = w.Write(body)
 	}
 }
 
-// HandleListResourceGroups serves GET /api/resource-groups?subscriptionId=...
+// HandleListResourceGroupsserves GET /api/resource-groups?subscriptionId=...
 func HandleListResourceGroups() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := extractBearerToken(r)
@@ -56,11 +56,11 @@ func HandleListResourceGroups() http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		w.Write(body)
+		_, _ = w.Write(body)
 	}
 }
 
-// armGet performs a GET request to the Azure ARM API using the provided token.
+// armGetperforms a GET request to the Azure ARM API using the provided token.
 func armGet(ctx context.Context, url, token string) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -72,7 +72,7 @@ func armGet(ctx context.Context, url, token string) ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, fmt.Errorf("ARM request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
