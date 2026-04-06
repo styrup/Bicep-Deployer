@@ -1,4 +1,5 @@
 metadata description = 'Creates a Resource Group with enforced tags and optional budget alert'
+metadata name = 'Resource Group'
 metadata author = 'Platform Team'
 metadata version = '1.0'
 metadata category = 'Governance'

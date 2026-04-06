@@ -183,11 +183,9 @@ function renderTemplateGroups(groups) {
     group.templates.forEach((tpl) => {
       const btn = document.createElement("button");
       btn.className = "template-item";
-      // Show just the filename, not the full path
-      const displayName = tpl.includes("/") ? tpl.split("/").pop() : tpl;
-      btn.textContent = displayName;
-      btn.title = tpl;
-      btn.addEventListener("click", () => selectTemplate(tpl, btn));
+      btn.textContent = tpl.displayName;
+      btn.title = tpl.path;
+      btn.addEventListener("click", () => selectTemplate(tpl.path, btn));
       items.appendChild(btn);
     });
 

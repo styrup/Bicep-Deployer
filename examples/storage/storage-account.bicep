@@ -1,4 +1,5 @@
 metadata description = 'Creates a Storage Account with configurable SKU and access tier'
+metadata name = 'Storage Account'
 metadata author = 'Platform Team'
 metadata version = '1.0'
 metadata category = 'Storage'

@@ -14,10 +14,16 @@ type TemplateStore interface {
 	DownloadTemplate(ctx context.Context, name string) (string, error)
 }
 
+// TemplateSummary is a template entry in the list response.
+type TemplateSummary struct {
+	Path        string `json:"path"`
+	DisplayName string `json:"displayName"`
+}
+
 // TemplateGroup groups templates by folder prefix.
 type TemplateGroup struct {
-	Name      string   `json:"name"`
-	Templates []string `json:"templates"`
+	Name      string            `json:"name"`
+	Templates []TemplateSummary `json:"templates"`
 }
 
 type templateListResponse struct {
@@ -42,17 +48,27 @@ func HandleListTemplates(store TemplateStore) http.HandlerFunc {
 			return
 		}
 
-		// Filter to published templates only.
-		var published []string
+		// Filter to published templates, extracting display names from metadata.
+		var published []TemplateSummary
 		for _, name := range names {
 			content, err := store.DownloadTemplate(r.Context(), name)
 			if err != nil {
 				continue
 			}
 			meta := bicep.ParseMetadata(content)
-			if strings.EqualFold(meta["published"], "true") {
-				published = append(published, name)
+			if !strings.EqualFold(meta["published"], "true") {
+				continue
 			}
+			displayName := meta["name"]
+			if displayName == "" {
+				// Fall back to filename without extension.
+				displayName = name
+				if idx := strings.LastIndex(displayName, "/"); idx != -1 {
+					displayName = displayName[idx+1:]
+				}
+				displayName = strings.TrimSuffix(displayName, ".bicep")
+			}
+			published = append(published, TemplateSummary{Path: name, DisplayName: displayName})
 		}
 
 		groups := groupTemplates(published)
@@ -60,21 +76,21 @@ func HandleListTemplates(store TemplateStore) http.HandlerFunc {
 	}
 }
 
-// groupTemplates organizes flat blob paths into groups by their directory prefix.
+// groupTemplates organizes template summaries into groups by their directory prefix.
 // Files without a prefix go into a "General" group.
-func groupTemplates(names []string) []TemplateGroup {
-	groupMap := make(map[string][]string)
+func groupTemplates(templates []TemplateSummary) []TemplateGroup {
+	groupMap := make(map[string][]TemplateSummary)
 	var order []string
 
-	for _, name := range names {
+	for _, tpl := range templates {
 		group := "General"
-		if idx := strings.LastIndex(name, "/"); idx != -1 {
-			group = name[:idx]
+		if idx := strings.LastIndex(tpl.Path, "/"); idx != -1 {
+			group = tpl.Path[:idx]
 		}
 		if _, exists := groupMap[group]; !exists {
 			order = append(order, group)
 		}
-		groupMap[group] = append(groupMap[group], name)
+		groupMap[group] = append(groupMap[group], tpl)
 	}
 
 	groups := make([]TemplateGroup, 0, len(order))

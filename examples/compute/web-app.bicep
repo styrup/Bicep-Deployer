@@ -1,4 +1,5 @@
 metadata description = 'Creates a Linux web app on Azure App Service with Application Insights'
+metadata name = 'Web App (Linux)'
 metadata author = 'Platform Team'
 metadata version = '2.0'
 metadata category = 'Compute'
