@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -55,8 +58,9 @@ func HandleDeploy(store TemplateStore) http.HandlerFunc {
 			return
 		}
 
-		// Compile Bicep → ARM JSON using bicep CLI
-		armJSON, err := compileBicep(r.Context(), bicepContent)
+		// Compile Bicep → ARM JSON using bicep CLI.
+		// Passes the store so that referenced modules can be downloaded too.
+		armJSON, err := compileBicep(r.Context(), store, req.TemplateName, bicepContent)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "bicep compilation failed: "+err.Error())
 			return
@@ -85,23 +89,36 @@ func HandleDeploy(store TemplateStore) http.HandlerFunc {
 	}
 }
 
-// compileBicep writes the content to a temp file, invokes `bicep build --stdout`,
-// and returns the compiled ARM JSON. The temp file is removed after compilation.
-func compileBicep(ctx context.Context, bicepContent string) (json.RawMessage, error) {
-	// Write to temp file — bicep CLI requires a file path, not stdin
-	tmpFile, err := os.CreateTemp("", "*.bicep")
+// moduleRefRe matches Bicep module declarations that reference local files.
+// Examples:
+//
+//	module budget './modules/budget.bicep' = {
+//	module budget './modules/budget.bicep' = if (cond) {
+var moduleRefRe = regexp.MustCompile(`(?m)^\s*module\s+\S+\s+'([^']+\.bicep)'\s*=`)
+
+// compileBicep creates a temp directory, writes the main template (preserving
+// its original filename), recursively downloads any locally-referenced modules,
+// and invokes `bicep build --stdout`. The temp directory is removed afterwards.
+func compileBicep(ctx context.Context, store TemplateStore, templateName, bicepContent string) (json.RawMessage, error) {
+	tmpDir, err := os.MkdirTemp("", "bicep-*")
 	if err != nil {
-		return nil, fmt.Errorf("create temp file: %w", err)
+		return nil, fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer os.RemoveAll(tmpDir)
 
-	if _, err := tmpFile.WriteString(bicepContent); err != nil {
-		tmpFile.Close()
-		return nil, fmt.Errorf("write temp file: %w", err)
+	// Write the main template using its original blob path so that relative
+	// module references resolve correctly.
+	mainPath := filepath.Join(tmpDir, filepath.FromSlash(templateName))
+	if err := writeFile(mainPath, bicepContent); err != nil {
+		return nil, fmt.Errorf("write main template: %w", err)
 	}
-	tmpFile.Close()
 
-	cmd := exec.CommandContext(ctx, "bicep", "build", tmpFile.Name(), "--stdout")
+	// Recursively download referenced modules.
+	if err := downloadModules(ctx, store, tmpDir, templateName, bicepContent); err != nil {
+		return nil, fmt.Errorf("download modules: %w", err)
+	}
+
+	cmd := exec.CommandContext(ctx, "bicep", "build", mainPath, "--stdout")
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -117,6 +134,68 @@ func compileBicep(ctx context.Context, bicepContent string) (json.RawMessage, er
 	}
 
 	return raw, nil
+}
+
+// downloadModules parses module references from bicepContent, downloads each
+// file from blob storage, writes it into tmpDir, and recurses for any modules
+// those files reference. visited tracks already-processed blob paths.
+func downloadModules(ctx context.Context, store TemplateStore, tmpDir, templateName, bicepContent string) error {
+	visited := map[string]bool{templateName: true}
+	return downloadModulesRec(ctx, store, tmpDir, templateName, bicepContent, visited)
+}
+
+func downloadModulesRec(ctx context.Context, store TemplateStore, tmpDir, templateName, bicepContent string, visited map[string]bool) error {
+	templateDir := path.Dir(templateName) // blob paths use forward slashes
+
+	for _, ref := range parseModuleRefs(bicepContent) {
+		// Resolve the module's blob path relative to the referencing template.
+		blobPath := path.Clean(path.Join(templateDir, ref))
+
+		if visited[blobPath] {
+			continue
+		}
+		visited[blobPath] = true
+
+		content, err := store.DownloadTemplate(ctx, blobPath)
+		if err != nil {
+			return fmt.Errorf("download module %q: %w", blobPath, err)
+		}
+
+		filePath := filepath.Join(tmpDir, filepath.FromSlash(blobPath))
+		if err := writeFile(filePath, content); err != nil {
+			return fmt.Errorf("write module %q: %w", blobPath, err)
+		}
+
+		// Recurse to handle nested module references.
+		if err := downloadModulesRec(ctx, store, tmpDir, blobPath, content, visited); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// parseModuleRefs extracts relative file paths from Bicep module declarations.
+func parseModuleRefs(content string) []string {
+	matches := moduleRefRe.FindAllStringSubmatch(content, -1)
+	refs := make([]string, 0, len(matches))
+	for _, m := range matches {
+		ref := m[1]
+		// Skip registry or template-spec references (e.g. "br:", "ts:").
+		if strings.Contains(ref, ":") {
+			continue
+		}
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+// writeFile creates parent directories and writes content to filePath.
+func writeFile(filePath, content string) error {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, []byte(content), 0o644)
 }
 
 // buildDeploymentPayload constructs the ARM deployment request body.
