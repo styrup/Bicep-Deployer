@@ -180,6 +180,13 @@ html, body {
   line-height: 1.7;
 }
 
+.login-notice {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 20px;
+  line-height: 1.6;
+}
+
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 .sidebar {
   background: var(--bg-surface);

@@ -90,7 +90,7 @@ async function handleLogin() {
     showApp(account);
   } catch (e) {
     console.error("Login error:", e);
-    alert("Kunne ikke logge ind: " + e.message);
+    alert("Could not sign in: " + e.message);
   }
 }
 
@@ -129,7 +129,7 @@ async function loadSubscriptions() {
     populateSelect(elSelectSub, (data.value || []).map((s) => ({
       value: s.subscriptionId,
       label: `${s.displayName} (${s.subscriptionId})`,
-    })), "Vælg subscription…");
+    })), "Select subscription…");
   } catch (e) {
     console.error("Failed to load subscriptions:", e);
   }
@@ -154,7 +154,7 @@ async function loadResourceGroups(subscriptionId) {
     populateSelect(elSelectRg, (data.value || []).map((rg) => ({
       value: rg.name,
       label: rg.name,
-    })), "Vælg resource group…");
+    })), "Select resource group…");
   } catch (e) {
     console.error("Failed to load resource groups:", e);
   }
@@ -353,10 +353,10 @@ async function onDeploy() {
   const scope = document.querySelector('input[name="scope"]:checked').value;
   const rgName = elSelectRg.value;
 
-  if (!subId)          return alert("Vælg en subscription.");
-  if (!template)       return alert("Vælg en template.");
-  if (!deploymentName) return alert("Angiv et deployment navn.");
-  if (scope === "resourceGroup" && !rgName) return alert("Vælg en resource group.");
+  if (!subId)          return alert("Select a subscription.");
+  if (!template)       return alert("Select a template.");
+  if (!deploymentName) return alert("Enter a deployment name.");
+  if (scope === "resourceGroup" && !rgName) return alert("Select a resource group.");
 
   // Collect parameters with proper typing
   const parameters = {};
@@ -384,7 +384,7 @@ async function onDeploy() {
     }
   });
 
-  if (hasJsonError) return alert("Ret JSON-fejl i parametre før deploy.");
+  if (hasJsonError) return alert("Fix JSON errors in parameters before deploying.");
 
   const body = {
     templateName: template,
@@ -402,7 +402,7 @@ async function onDeploy() {
   elResultStatus.className = "result-status pending";
   elResultStatus.innerHTML = `
     <div class="status-timeline">
-      <div class="status-step"><span class="status-dot active"></span> Sender deployment…</div>
+      <div class="status-step"><span class="status-dot active"></span> Submitting deployment…</div>
     </div>`;
   elResultBody.textContent = "";
 
@@ -428,7 +428,7 @@ async function onDeploy() {
     }
   } catch (e) {
     elResultStatus.className = "result-status error";
-    elResultStatus.textContent = "✗ Netværksfejl";
+    elResultStatus.textContent = "✗ Network error";
     elResultBody.textContent = e.message;
   } finally {
     elBtnDeploy.disabled = false;
@@ -469,10 +469,10 @@ function startStatusPolling(deployURL, initialResponse) {
 
 function updateDeployTimeline(state, data) {
   const steps = [
-    { label: "Deployment sendt", done: true },
-    { label: "Validering", done: state !== "Running" || true },
-    { label: "Ressourcer oprettes…", active: state === "Running" },
-    { label: state === "Succeeded" ? "Fuldført ✓" : state === "Failed" ? "Fejlet ✗" : "Venter…",
+    { label: "Deployment submitted", done: true },
+    { label: "Validating", done: state !== "Running" || true },
+    { label: "Creating resources…", active: state === "Running" },
+    { label: state === "Succeeded" ? "Completed ✓" : state === "Failed" ? "Failed ✗" : "Waiting…",
       done: state === "Succeeded",
       error: state === "Failed" || state === "Canceled" },
   ];
@@ -498,7 +498,7 @@ function updateDeployTimeline(state, data) {
 
 function showDeployError(httpStatus, json) {
   elResultStatus.className = "result-status error";
-  elResultStatus.textContent = `✗ Fejl (HTTP ${httpStatus})`;
+  elResultStatus.textContent = `✗ Error (HTTP ${httpStatus})`;
   elResultBody.textContent = JSON.stringify(json, null, 2);
 }
 
