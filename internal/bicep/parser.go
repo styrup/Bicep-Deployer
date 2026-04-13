@@ -119,7 +119,9 @@ func ParseParameters(source string) []Parameter {
 
 		// param <name> <type> [= <default>]
 		if strings.HasPrefix(line, "param ") {
-			p := parseParamLine(line)
+			// Collect multi-line defaults (objects/arrays)
+			fullLine, nextIdx := collectParamLines(lines, i)
+			p := parseParamLine(fullLine)
 			p.AllowedValues = pendingAllowed
 
 			// Merge description: @description takes priority, append expression hint
@@ -138,6 +140,8 @@ func ParseParameters(source string) []Parameter {
 
 			pendingDescription = ""
 			pendingAllowed = nil
+			i = nextIdx
+			continue
 		} else if line != "" && !strings.HasPrefix(line, "//") {
 			pendingDescription = ""
 			pendingAllowed = nil
@@ -190,6 +194,52 @@ func parseAllowedBlock(lines []string, startIdx int) ([]string, int) {
 	return values, i
 }
 
+// collectParamLines joins a param declaration that spans multiple lines
+// when the default value is a multi-line object or array.
+// Returns the joined line and the next line index to process.
+func collectParamLines(lines []string, startIdx int) (string, int) {
+	line := strings.TrimSpace(lines[startIdx])
+
+	eqIdx := strings.Index(line, "=")
+	if eqIdx == -1 {
+		return line, startIdx + 1
+	}
+
+	afterEq := line[eqIdx+1:]
+	depth := 0
+	for _, ch := range afterEq {
+		switch ch {
+		case '{', '[':
+			depth++
+		case '}', ']':
+			depth--
+		}
+	}
+
+	if depth <= 0 {
+		return line, startIdx + 1
+	}
+
+	var buf strings.Builder
+	buf.WriteString(line)
+	i := startIdx + 1
+	for i < len(lines) && depth > 0 {
+		buf.WriteString("\n")
+		buf.WriteString(strings.TrimSpace(lines[i]))
+		for _, ch := range lines[i] {
+			switch ch {
+			case '{', '[':
+				depth++
+			case '}', ']':
+				depth--
+			}
+		}
+		i++
+	}
+
+	return buf.String(), i
+}
+
 // parseParamLine parses a single `param name type [= default]` line.
 func parseParamLine(line string) Parameter {
 	// Remove leading "param "
@@ -212,9 +262,11 @@ func parseParamLine(line string) Parameter {
 	// Look for default value after '='
 	if idx := strings.Index(rest, "="); idx != -1 {
 		defaultRaw := strings.TrimSpace(rest[idx+1:])
-		// Remove inline comments
-		if ci := strings.Index(defaultRaw, "//"); ci != -1 {
-			defaultRaw = strings.TrimSpace(defaultRaw[:ci])
+		// Remove inline comments only for single-line defaults
+		if !strings.Contains(defaultRaw, "\n") {
+			if ci := strings.Index(defaultRaw, "//"); ci != -1 {
+				defaultRaw = strings.TrimSpace(defaultRaw[:ci])
+			}
 		}
 		defaultVal := stripQuotes(defaultRaw)
 
