@@ -27,8 +27,8 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Port:                    getEnv("PORT", "8080"),
-		AzureTenantID:           os.Getenv("AZURE_TENANT_ID"),
-		AzureClientID:           os.Getenv("AZURE_CLIENT_ID"),
+		AzureTenantID:           os.Getenv("MSAL_TENANT_ID"),
+		AzureClientID:           os.Getenv("MSAL_CLIENT_ID"),
 		StorageAccountName:      os.Getenv("STORAGE_ACCOUNT_NAME"),
 		StorageContainerName:    getEnv("STORAGE_CONTAINER_NAME", "bicep"),
 		StorageConnectionString: os.Getenv("AZURE_STORAGE_CONNECTION_STRING"),
@@ -48,10 +48,10 @@ func Load() (*Config, error) {
 
 func (c *Config) validate() error {
 	if c.AzureTenantID == "" {
-		return fmt.Errorf("AZURE_TENANT_ID is required")
+		return fmt.Errorf("MSAL_TENANT_ID is required")
 	}
 	if c.AzureClientID == "" {
-		return fmt.Errorf("AZURE_CLIENT_ID is required")
+		return fmt.Errorf("MSAL_CLIENT_ID is required")
 	}
 	if c.StorageAccountName == "" && c.StorageConnectionString == "" {
 		return fmt.Errorf("either STORAGE_ACCOUNT_NAME (for Managed Identity) or AZURE_STORAGE_CONNECTION_STRING is required")

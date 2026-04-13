@@ -44,8 +44,8 @@ cp .env.example .env
 
 | Variable | Description | Required |
 |---|---|---|
-| `AZURE_TENANT_ID` | Azure AD Tenant ID | ✅ |
-| `AZURE_CLIENT_ID` | App Registration Client ID | ✅ |
+| `MSAL_TENANT_ID` | Azure AD Tenant ID | ✅ |
+| `MSAL_CLIENT_ID` | App Registration Client ID | ✅ |
 | `AZURE_STORAGE_CONNECTION_STRING` | Storage connection string | One of two |
 | `STORAGE_ACCOUNT_NAME` | Storage account (uses Managed Identity) | One of two |
 | `STORAGE_CONTAINER_NAME` | Blob container with `.bicep` files (default: `bicep`) | ✅ |
@@ -146,15 +146,13 @@ bicep-deployer/
 
 ## Deploy to Azure Container Apps
 
-### 1. Create Azure Container Registry and build image
+### 1. Build and push image
+
+The Docker image is publicly available at `ghcr.io/styrup/bicep-deployer:latest`. If you want to use your own image:
 
 ```bash
-# Create resource group and ACR
-az group create -n rg-bicep-deployer -l westeurope
-az acr create -n mybicepregistry -g rg-bicep-deployer --sku Basic --admin-enabled true
-
-# Build and push image
-az acr build -r mybicepregistry -t bicep-deployer:latest .
+docker build -t ghcr.io/yourorg/bicep-deployer:latest .
+docker push ghcr.io/yourorg/bicep-deployer:latest
 ```
 
 ### 2. Deploy with Bicep

@@ -7,8 +7,8 @@ param environmentName string = 'bicep-deployer-env'
 @description('Name of the Container App')
 param appName string = 'bicep-deployer'
 
-@description('Container image (e.g. myregistry.azurecr.io/bicep-deployer:latest)')
-param containerImage string
+@description('Container image (e.g. ghcr.io/styrup/bicep-deployer:latest)')
+param containerImage string = 'ghcr.io/styrup/bicep-deployer:latest'
 
 @description('Azure AD Tenant ID for MSAL')
 param azureTenantId string
@@ -22,18 +22,7 @@ param storageAccountName string
 @description('Blob container name with .bicep files')
 param storageContainerName string = 'bicep'
 
-@description('Container Registry server (e.g. myregistry.azurecr.io)')
-param registryServer string
-
-@description('Container Registry username')
-@secure()
-param registryUsername string
-
-@description('Container Registry password')
-@secure()
-param registryPassword string
-
-// ── Log Analytics (required by Container App Environment) ────────────────
+// ── Log Analytics(required by Container App Environment) ────────────────
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: '${appName}-logs'
   location: location
@@ -79,19 +68,6 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'http'
         allowInsecure: false
       }
-      registries: [
-        {
-          server: registryServer
-          username: registryUsername
-          passwordSecretRef: 'registry-password'
-        }
-      ]
-      secrets: [
-        {
-          name: 'registry-password'
-          value: registryPassword
-        }
-      ]
     }
     template: {
       containers: [
@@ -104,8 +80,8 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
           }
           env: [
             { name: 'PORT',                     value: '8080' }
-            { name: 'AZURE_TENANT_ID',           value: azureTenantId }
-            { name: 'AZURE_CLIENT_ID',           value: azureClientId }
+            { name: 'MSAL_TENANT_ID',           value: azureTenantId }
+            { name: 'MSAL_CLIENT_ID',           value: azureClientId }
             { name: 'STORAGE_ACCOUNT_NAME',      value: storageAccountName }
             { name: 'STORAGE_CONTAINER_NAME',    value: storageContainerName }
           ]
