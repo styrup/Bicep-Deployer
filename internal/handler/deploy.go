@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // DeployRequest is the JSON body for POST /api/deploy.
@@ -51,6 +52,9 @@ func HandleDeploy(store TemplateStore) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+
+		// Auto-generate deployment name from template
+		req.DeploymentName = generateDeploymentName(req.TemplateName)
 
 		// Download Bicep template from Blob Storage
 		bicepContent, err := store.DownloadTemplate(r.Context(), req.TemplateName)
@@ -97,6 +101,7 @@ func HandleDeploy(store TemplateStore) http.HandlerFunc {
 		slog.Info("deployment submitted", "template", req.TemplateName, "deployment", req.DeploymentName, "status", status)
 
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Deploy-URL", deployURL)
 		w.WriteHeader(status)
 		_, _ = w.Write(result)
 	}
@@ -297,13 +302,25 @@ func validateDeployRequest(req DeployRequest) error {
 	if req.SubscriptionID == "" {
 		return fmt.Errorf("subscriptionId is required")
 	}
-	if req.DeploymentName == "" {
-		return fmt.Errorf("deploymentName is required")
-	}
 	if req.Scope == "resourceGroup" && req.ResourceGroupName == "" {
 		return fmt.Errorf("resourceGroupName is required for scope=resourceGroup")
 	}
 	return nil
+}
+
+// generateDeploymentName creates a deployment name from the template filename and a timestamp.
+// ARM deployment names must be 1-64 chars and only contain alphanumerics, hyphens, dots, or underscores.
+func generateDeploymentName(templateName string) string {
+	base := path.Base(templateName)
+	base = strings.TrimSuffix(base, ".bicep")
+	base = strings.TrimSuffix(base, filepath.Ext(base))
+	ts := time.Now().UTC().Format("20060102-150405")
+	name := base + "-" + ts
+	// ARM limit is 64 characters
+	if len(name) > 64 {
+		name = name[:64]
+	}
+	return name
 }
 
 // validateTemplateName rejects path traversal and absolute paths.

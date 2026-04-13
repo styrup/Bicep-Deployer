@@ -23,7 +23,6 @@ const elTemplateMeta  = document.getElementById("template-meta");
 const elSelectRg      = document.getElementById("select-rg");
 const elRgSection     = document.getElementById("rg-section");
 const elParamsFields  = document.getElementById("params-fields");
-const elDeployName    = document.getElementById("input-deployment-name");
 const elBtnDeploy     = document.getElementById("btn-deploy");
 const elDeployResult  = document.getElementById("deploy-result");
 const elResultStatus  = document.getElementById("result-status");
@@ -126,10 +125,10 @@ async function loadSubscriptions() {
   try {
     const token = await getToken();
     const data = await apiGet("/api/subscriptions", token);
-    populateSelect(elSelectSub, (data.value || []).map((s) => ({
-      value: s.subscriptionId,
-      label: `${s.displayName} (${s.subscriptionId})`,
-    })), "Select subscription…");
+    const subs = (data.value || [])
+      .map((s) => ({ value: s.subscriptionId, label: `${s.displayName} (${s.subscriptionId})` }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    populateSelect(elSelectSub, subs, "Select subscription…");
   } catch (e) {
     console.error("Failed to load subscriptions:", e);
   }
@@ -151,10 +150,10 @@ async function loadResourceGroups(subscriptionId) {
   try {
     const token = await getToken();
     const data = await apiGet(`/api/resource-groups?subscriptionId=${subscriptionId}`, token);
-    populateSelect(elSelectRg, (data.value || []).map((rg) => ({
-      value: rg.name,
-      label: rg.name,
-    })), "Select resource group…");
+    const rgs = (data.value || [])
+      .map((rg) => ({ value: rg.name, label: rg.name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    populateSelect(elSelectRg, rgs, "Select resource group…");
   } catch (e) {
     console.error("Failed to load resource groups:", e);
   }
@@ -349,13 +348,11 @@ function validateJsonInput(textarea) {
 async function onDeploy() {
   const subId = elSelectSub.value;
   const template = selectedTemplate;
-  const deploymentName = elDeployName.value.trim();
   const scope = document.querySelector('input[name="scope"]:checked').value;
   const rgName = elSelectRg.value;
 
   if (!subId)          return alert("Select a subscription.");
   if (!template)       return alert("Select a template.");
-  if (!deploymentName) return alert("Enter a deployment name.");
   if (scope === "resourceGroup" && !rgName) return alert("Select a resource group.");
 
   // Collect parameters with proper typing
@@ -391,7 +388,6 @@ async function onDeploy() {
     scope,
     subscriptionId: subId,
     resourceGroupName: rgName,
-    deploymentName,
     parameters,
   };
 
@@ -420,8 +416,8 @@ async function onDeploy() {
     const json = await resp.json();
 
     if (resp.ok || resp.status === 201) {
-      // Extract deployment URL for status polling
-      const deployURL = buildStatusURL(body);
+      // Get deployment status URL from backend
+      const deployURL = resp.headers.get("X-Deploy-URL");
       startStatusPolling(deployURL, json);
     } else {
       showDeployError(resp.status, json);
@@ -436,13 +432,6 @@ async function onDeploy() {
 }
 
 // ── Deployment status polling ─────────────────────────────────────────────────
-function buildStatusURL(req) {
-  const base = "https://management.azure.com";
-  if (req.scope === "subscription") {
-    return `${base}/subscriptions/${req.subscriptionId}/providers/Microsoft.Resources/deployments/${req.deploymentName}?api-version=2022-09-01`;
-  }
-  return `${base}/subscriptions/${req.subscriptionId}/resourceGroups/${req.resourceGroupName}/providers/Microsoft.Resources/deployments/${req.deploymentName}?api-version=2022-09-01`;
-}
 
 function startStatusPolling(deployURL, initialResponse) {
   if (pollTimer) clearInterval(pollTimer);
